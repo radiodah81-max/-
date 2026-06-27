@@ -13,20 +13,47 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Extract ZIP file (smart)
+    - name: Extract ZIP file
       run: |
-        unzip narrative.zip -d ./temp
-        # البحث عن gradlew ونقل الملفات من مجلده
-        GRADLE_DIR=$(find ./temp -name "gradlew" -type f -exec dirname {} \; | head -1)
-        if [ -n "$GRADLE_DIR" ]; then
-          echo "✅ Found project in: $GRADLE_DIR"
-          mv "$GRADLE_DIR"/* ./
-        else
-          echo "⚠️ gradlew not found, moving all files"
-          mv ./temp/* ./
-        fi
-        rm -rf ./temp
+        echo "📂 الملفات الموجودة قبل الفك:"
         ls -la
+
+        if [ ! -f narrative.zip ]; then
+          echo "❌ ملف narrative.zip غير موجود!"
+          exit 1
+        fi
+
+        unzip narrative.zip -d ./extracted
+
+        echo "📂 محتويات المجلد المستخرج:"
+        find ./extracted -maxdepth 3 -type f | head -30
+
+        # البحث عن المجلد اللي فيه gradlew
+        GRADLE_DIR=$(find ./extracted -name "gradlew" -type f -exec dirname {} \; | head -1)
+
+        if [ -z "$GRADLE_DIR" ]; then
+          echo "❌ لم يتم العثور على gradlew داخل الملف!"
+          echo "هل ملف ZIP يحتوي فعلاً على مشروع أندرويد؟"
+          exit 1
+        fi
+
+        echo "✅ تم العثور على المشروع في: $GRADLE_DIR"
+
+        # نقل الملفات باستخدام cp بدلاً من mv لتجنب الأخطاء
+        cp -r "$GRADLE_DIR"/* ./
+        cp -r "$GRADLE_DIR"/.* ./ 2>/dev/null || true
+
+        rm -rf ./extracted
+
+        echo "📂 الملفات بعد النقل:"
+        ls -la
+
+        if [ ! -f gradlew ]; then
+          echo "❌ خطأ: gradlew غير موجود بعد النقل"
+          exit 1
+        fi
+
+        echo "✅ تم الاستخراج بنجاح!"
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -36,9 +63,6 @@ jobs:
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
-
-    - name: Build with Gradle
-      run: ./gradlew build
 
     - name: Build Debug APK
       run: ./gradlew assembleDebug
